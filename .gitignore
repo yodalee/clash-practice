@@ -43,4 +43,4 @@ vhdl
 verilog
 systemverilog
 *_out.config
-src/*/*.json
+/src/**/*.json
