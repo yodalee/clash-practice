@@ -31,6 +31,29 @@ blink clk rst en = msb <$> r
     r :: Signal dom (Unsigned (CLog 2 (SecondPeriods dom)))
     r = register clk rst en 0 (r + 1)
 
+
+data OnOff on off =
+    On (Index on)
+  | Off (Index off)
+  deriving (Generic, NFDataX)
+
+succIdx :: (Eq a, Enum a, Bounded a) => a -> Maybe a
+succIdx x
+  | x == maxBound = Nothing
+  | otherwise = Just $ succ x
+predIdx :: (Eq a, Enum a, Bounded a) => a -> Maybe a
+predIdx x
+  | x == minBound = Nothing
+  | otherwise = Just $ pred x
+
+isOn :: OnOff on off -> Bool
+isOn On {}  = True
+isOn Off {} = False
+
+countOnOff :: (KnownNat on, KnownNat off) => OnOff on off -> OnOff on off
+countOnOff (On x) = maybe (Off 0) On $ succIdx x
+countOnOff (Off y) = maybe (On 0) Off $ succIdx y
+
 type HzToPeriod (freq :: Nat) = 1_000_000_000_000 `Div` freq
 type ClockDivider dom ps = ps `Div` DomainPeriod dom
 
@@ -38,17 +61,18 @@ blinkSecond :: forall dom. (KnownDomain dom)
   => (1 <= DomainPeriod dom, KnownNat (DomainPeriod dom))
   => (1 <= HzToPeriod 1 `Div` DomainPeriod dom)
   => Clock dom -> Reset dom -> Enable dom -> Signal dom Bit
-blinkSecond clk rst en = msb <$> r
+blinkSecond clk rst en = boolToBit . isOn <$> r
   where
-    r :: Signal dom (Unsigned (CLog 2 (ClockDivider dom (HzToPeriod 1))))
-    r = register clk rst en 0 $ mux (r .<. limit) (r + 1) 0
-    limit = snatToNum (SNat @(ClockDivider dom (HzToPeriod 1)))
+    r :: Signal dom (
+      OnOff (ClockDivider dom (500_000_000_000))
+            (ClockDivider dom (500_000_000_000)))
+    r = register clk rst en (Off 0) $ countOnOff <$> r
 
-data 
+createDomain vSystem{vName="Dom25", vPeriod = hzToPeriod 25_000_000}
 
 blinkEntity
-  :: "clk" ::: Clock System
-  -> "LED" ::: Signal System Bit
+  :: "clk" ::: Clock Dom25
+  -> "LED" ::: Signal Dom25 Bit
 blinkEntity clk = blinkSecond clk resetGen enableGen
 
 makeTopEntity 'blinkEntity
