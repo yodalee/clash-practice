@@ -1,4 +1,4 @@
-module Ch4 (
+module Blink (
   helloRegister,
   flipRegister,
   blink) where
