@@ -6,6 +6,18 @@ import Clash.Annotations.TH
 import qualified Data.List as L
 import RetroClash.Utils
 
+ledStrip
+  :: "BTNS" ::: Signal System (Vec 2 Bit)
+  -> "LEDS" ::: Signal System (Vec 4 Bit)
+ledStrip switches = fmap (map boolToBit) . bundle $
+  both :> either :> onlyOne :> onlyTheSecond :> Nil
+  where
+    sw1 :> sw2 :> Nil = unbundle $ map bitToBool <$> switches
+    both = sw1 .&&. sw2
+    either = sw1 .||. sw2
+    onlyOne = sw1 ./=. sw2
+    onlyTheSecond = (not <$> sw1) .&&. sw2
+
 showSS :: Vec 7 Bool -> String
 showSS (a :> b :> c :> d :> e :> f :> g :> Nil) = unlines . L.concat $
   [ L.replicate 1 $ horiz  a
@@ -45,14 +57,30 @@ encodeHexSS n = unpack $ case n of
   0xe -> 0b1001111
   0xf -> 0b1000111
 
+demux :: Unsigned 1 -> Vec 2 Bool
+demux n = unpack $ case n of
+  0x0 -> 0b01
+  0x1 -> 0b10
+
+
 -- Notes about the map to lpf file
 -- It will be extracted to: BTNS[3] :> BTNS[2] :> BTNS[1] :> BTNS[0] :> Nil
 -- Same to LEDS
 sevenSegs
-  :: "BTNS" ::: Signal System (Vec 4 Bit)
-  -> "LEDS" ::: Signal System (Vec 7 (Active Low))
-sevenSegs btns = map toActive <$> segments
+  :: (
+    "SEL" ::: Signal System Bit,
+    "BTNS" ::: Signal System (Vec 4 Bit)
+  )
+  -> (
+    "ANODES" ::: Signal System (Vec 2 (Active High)),
+    "LEDS" ::: Signal System (Vec 7 (Active Low))
+  )
+sevenSegs (sel, btns) =
+  (map toActive <$> anodes,
+   map toActive <$> segments)
   where
+    selbool = fmap bitToBool sel
+    anodes = bundle $ selbool :> (fmap not selbool) :> Nil
     digits = bitCoerce <$> btns
     segments = encodeHexSS <$> digits
 
