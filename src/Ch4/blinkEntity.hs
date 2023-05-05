@@ -31,9 +31,24 @@ blink clk rst en = msb <$> r
     r :: Signal dom (Unsigned (CLog 2 (SecondPeriods dom)))
     r = register clk rst en 0 (r + 1)
 
+type HzToPeriod (freq :: Nat) = 1_000_000_000_000 `Div` freq
+type ClockDivider dom ps = ps `Div` DomainPeriod dom
+
+blinkSecond :: forall dom. (KnownDomain dom)
+  => (1 <= DomainPeriod dom, KnownNat (DomainPeriod dom))
+  => (1 <= HzToPeriod 1 `Div` DomainPeriod dom)
+  => Clock dom -> Reset dom -> Enable dom -> Signal dom Bit
+blinkSecond clk rst en = msb <$> r
+  where
+    r :: Signal dom (Unsigned (CLog 2 (ClockDivider dom (HzToPeriod 1))))
+    r = register clk rst en 0 $ mux (r .<. limit) (r + 1) 0
+    limit = snatToNum (SNat @(ClockDivider dom (HzToPeriod 1)))
+
+data 
+
 blinkEntity
   :: "clk" ::: Clock System
   -> "LED" ::: Signal System Bit
-blinkEntity clk = blink clk resetGen enableGen
+blinkEntity clk = blinkSecond clk resetGen enableGen
 
 makeTopEntity 'blinkEntity
